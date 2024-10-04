@@ -1,0 +1,69 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import json
+import argparse
+import subprocess
+from urllib import request, error
+
+
+def get_bibtex(doi, ispreprint):
+    if ispreprint:
+        url = f"https://arxiv.org/bibtex/{doi}"
+    else:
+        url = f"https://api.crossref.org/works/{doi}/transform/application/x-bibtex"
+    req = request.Request(url)
+
+    try:
+        with request.urlopen(req) as response:
+            return response.read().decode()
+    except error.HTTPError as e:
+        print(f"HTTP Error: {e.code}")
+        sys.exit(1)
+    except error.URLError as e:
+        print(f"URL Error: {e.reason}")
+        sys.exit(1)
+
+
+def bibtex_to_csljson(bibtex):
+    cmd = ["pandoc", "-f", "bibtex", "-t", "csljson"]
+    result = subprocess.run(cmd, input=bibtex, text=True, capture_output=True)
+    return result.stdout
+
+
+def csljson_to_bibtex(csljson):
+    cmd = ["pandoc", "-f", "csljson", "-t", "bibtex"]
+    result = subprocess.run(
+        cmd, input=json.dumps(csljson), text=True, capture_output=True
+    )
+    return result.stdout
+
+
+def fetch(args):
+    # NOTE: pandoc bibtex to csljson is more reliable and arxiv api does not support csljson
+    bibtex = get_bibtex(args.doi, args.arxiv)
+    csljson = json.loads(bibtex_to_csljson(bibtex))
+    breakpoint()
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Aru's Bibliograpy Management System")
+
+    subparsers = parser.add_subparsers()
+
+    fetch_parser = subparsers.add_parser(
+        "fetch", help="Fetch bibtex data from Crossref"
+    )
+    fetch_parser.add_argument("doi", type=str, help="DOI")
+    fetch_parser.add_argument(
+        "--arxiv", action="store_true", help="Arxiv pre-print DOI"
+    )
+    fetch_parser.set_defaults(func=fetch)
+
+    args = parser.parse_args()
+    print(args.func(args))
+
+
+if __name__ == "__main__":
+    main()
